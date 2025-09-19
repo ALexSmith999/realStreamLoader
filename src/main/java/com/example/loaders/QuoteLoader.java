@@ -6,11 +6,9 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
-import java.util.ArrayList;
 import java.util.List;
 
 public class QuoteLoader implements Loader {
-
     private final PgRepository repo;
 
     public QuoteLoader(PgRepository repo) {
@@ -19,24 +17,33 @@ public class QuoteLoader implements Loader {
 
     @Override
     public boolean supports(String link) {
-        return link.startsWith("https://quotes.toscrape.com");
+        return link.startsWith("https://quotes.toscrape.com/");
     }
 
     @Override
     public void load(Document mongoDoc) {
         String content = mongoDoc.getString("content");
+        if (content == null || content.isEmpty()) return;
+
         org.jsoup.nodes.Document html = Jsoup.parse(content);
 
         Elements quotes = html.select("div.quote");
-        for (Element quoteElem : quotes) {
-            String quoteText = getText(quoteElem.selectFirst("span.text"));
-            String author = getText(quoteElem.selectFirst("small.author"));
+        for (Element quote : quotes) {
+            Element textElem = quote.selectFirst("span.text");
+            Element authorElem = quote.selectFirst("small.author");
+            if (textElem == null || authorElem == null) continue;
 
-            List<String> tags = new ArrayList<>();
-            Elements tagElems = quoteElem.select("div.tags a.tag");
-            for (Element tag : tagElems) tags.add(tag.text());
+            String quoteText = textElem.text();
+            String authorName = authorElem.text();
 
-            Integer authorId = repo.findAuthorIdByName(author); // implement lookup
+            // Try to find author_id; set null if not found
+            Integer authorId = repo.findAuthorIdByName(authorName);
+
+            // Tags
+            Elements tagLinks = quote.select("div.tags a.tag");
+            List<String> tagsList = tagLinks.eachText();
+            String[] tags = tagsList.toArray(new String[0]);
+
             repo.insertQuote(
                     mongoDoc.getString("uid"),
                     mongoDoc.getInteger("version", 1),
@@ -45,9 +52,5 @@ public class QuoteLoader implements Loader {
                     tags
             );
         }
-    }
-
-    private String getText(Element elem) {
-        return elem != null ? elem.text().trim() : "";
     }
 }

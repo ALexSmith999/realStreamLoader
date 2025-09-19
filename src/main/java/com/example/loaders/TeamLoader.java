@@ -7,7 +7,6 @@ import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
 public class TeamLoader implements Loader {
-
     private final PgRepository repo;
 
     public TeamLoader(PgRepository repo) {
@@ -16,25 +15,30 @@ public class TeamLoader implements Loader {
 
     @Override
     public boolean supports(String link) {
-        return link.contains("scrapethissite.com/pages/"); // or adjust as needed
+        return link.startsWith("https://www.scrapethissite.com/pages/teams/");
     }
 
     @Override
     public void load(Document mongoDoc) {
         String content = mongoDoc.getString("content");
+        if (content == null || content.isEmpty()) return;
+
         org.jsoup.nodes.Document html = Jsoup.parse(content);
 
         Elements teams = html.select("tr.team");
         for (Element team : teams) {
-            String name = getText(team.selectFirst("td.name"));
-            int year = parseInt(getText(team.selectFirst("td.year")));
-            int wins = parseInt(getText(team.selectFirst("td.wins")));
-            int losses = parseInt(getText(team.selectFirst("td.losses")));
-            int otLosses = parseInt(getText(team.selectFirst("td.ot-losses")));
-            double winPct = parseDouble(getText(team.selectFirst("td.pct")));
-            int goalsFor = parseInt(getText(team.selectFirst("td.gf")));
-            int goalsAgainst = parseInt(getText(team.selectFirst("td.ga")));
-            int diff = parseInt(getText(team.selectFirst("td.diff")));
+            Elements tds = team.select("td");
+            if (tds.size() < 9) continue; // skip incomplete rows
+
+            String name = tds.get(0).text();
+            Integer year = parseIntSafe(tds.get(1).text());
+            Integer wins = parseIntSafe(tds.get(2).text());
+            Integer losses = parseIntSafe(tds.get(3).text());
+            Integer otLosses = parseIntSafe(tds.get(4).text());
+            Double winPct = parseDoubleSafe(tds.get(5).text());
+            Integer goalsFor = parseIntSafe(tds.get(6).text());
+            Integer goalsAgainst = parseIntSafe(tds.get(7).text());
+            Integer diff = parseIntSafe(tds.get(8).text());
 
             repo.insertTeam(
                     mongoDoc.getString("uid"),
@@ -45,17 +49,11 @@ public class TeamLoader implements Loader {
         }
     }
 
-    private String getText(Element elem) {
-        return elem != null ? elem.text().trim() : "";
+    private Integer parseIntSafe(String value) {
+        try { return Integer.parseInt(value.trim()); } catch (Exception e) { return 0; }
     }
 
-    private int parseInt(String val) {
-        try { return Integer.parseInt(val.replaceAll("[^0-9]", "")); }
-        catch (Exception e) { return 0; }
-    }
-
-    private double parseDouble(String val) {
-        try { return Double.parseDouble(val); }
-        catch (Exception e) { return 0.0; }
+    private Double parseDoubleSafe(String value) {
+        try { return Double.parseDouble(value.trim()); } catch (Exception e) { return 0.0; }
     }
 }
